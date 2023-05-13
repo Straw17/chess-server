@@ -8,12 +8,171 @@ Light Squares: #f0d9b5
 <html>
     <head>
         <style>
-            body {
-                background-color: #b58863;
+            #board {
+                border:solid 3px black;
+                margin:0 auto;
+                display: flex;
+                flex-wrap: wrap;
+            }
+
+            .square {
+                width: 53px;
+                height: 53px;
+                margin: 0px;
+                padding: 0px;
+                border: 0px;
+                max-width: 53px;
+                max-height: 53px;
+                
+                display: flex;
+                justify-content: center;
+            }
+
+            .square.selected {
+                filter: brightness(50%);
+            }
+
+            .square.black {
+                background: #b58863;
+            }
+
+            .square.white {
+                background: #f0d9b5;
             }
         </style>
+
+        <script src="jquery-3.6.0.min.js"></script>
     </head>
     <body>
+        <div id="board"></div>
 
+        <script>
+            //regex helpers
+            function isAlphaUpper(ch){
+                return /^[A-Z]+$/.test(ch);
+            }
+
+            function isAlphaLower(ch){
+                return /^[a-z]+$/.test(ch);
+            }
+
+            //templates
+            function square(color, row, col) {
+                return `<div class = "square ${color}" id="r${row}c${col}"></div>`;
+            }
+
+            function chessPiece(piece) {
+                return `<img src="pieces/${piece}.svg">`;
+            }
+
+            //board construction
+            var board = $("#board").get(0);
+
+            function constructBoard(isWhite, height, width) {
+                board.style.height = 53*height + "px";
+                board.style.width = 53*width + "px";
+
+                var color;
+                if(!isWhite) {
+                    for(var r = 0; r < height; r++) {
+                        for(var c = 0; c < width; c++) {
+                            if(r % 2 == 0) {
+                                color = (c % 2 === 0 ? "white" : "black");
+                            } else {
+                                color = (c % 2 === 0 ? "black" : "white");
+                            }
+                            board.insertAdjacentHTML("beforeend", square(color, r, c))
+                        }
+                    }
+                } else {
+                    for(var r = height-1; r >= 0; r--) {
+                        for(var c = width-1; c >= 0; c--) {
+                            if(r % 2 == 0) {
+                                color = (c % 2 === 0 ? "white" : "black");
+                            } else {
+                                color = (c % 2 === 0 ? "black" : "white");
+                            }
+                            board.insertAdjacentHTML("beforeend", square(color, r, c))
+                        }
+                    }
+                }
+            }
+
+            var pieceRegex = new RegExp("[a-z][A-Z]");
+            function changePieces(FEN) {
+                var FENRows = FEN.split("/");
+                var boardArray = new Array(8);
+                for(var r = 0; r < 8; r++) {
+                    boardArray[r] = FENRows[r].split("");
+                }
+
+                var piece;
+                for(var r = 0; r < 8; r++) {
+                    var newRow = new Array(8);
+                    var colIndex = 0;
+
+                    for(var c = 0; c < boardArray[r].length; c++) {
+                        piece = boardArray[r][c];
+                        if(isAlphaLower(piece)) {
+                            piece = "b" + piece.toUpperCase();
+                            newRow[colIndex] = piece;
+                            colIndex++;
+                        } else if(isAlphaUpper(piece)) {
+                            piece = "w" + piece.toUpperCase();
+                            newRow[colIndex] = piece;
+                            colIndex++;
+                        } else {
+                            var toAdd = parseInt(piece);
+                            for(var i = 0; i < toAdd; i++) {
+                                newRow[colIndex] = "";
+                                colIndex++;
+                            }
+                        }
+                    }
+
+                    boardArray[r] = newRow;
+                }
+
+                var activeSquare;
+                for(var r = 0; r < 8; r++) {
+                    for(var c = 0; c < 8; c++) {
+                        activeSquare = $(`#r${r}c${c}`).get(0);
+                        if(!(boardArray[r][c] === "")) {
+                            activeSquare.innerHTML = chessPiece(boardArray[r][c]);
+                            if(boardArray[r][c].charAt(0) === "b") {
+                                activeSquare.classList.add("blackPiece");
+                            } else {
+                                activeSquare.classList.add("whitePiece");
+                            }
+                            activeSquare.classList.add(boardArray[r][c]);
+                        } else {
+                            activeSquare.innerHTML = "";
+                            activeSquare.classList.remove("blackPiece");
+                            activeSquare.classList.remove("whitePiece");
+                            activeSquare.className = activeSquare.className.replace(pieceRegex, "");
+                        }
+                    }
+                }
+            }
+
+            constructBoard(false, 8, 8);
+            //changePieces("rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R");
+
+            //manage click events
+            $("document").ready(function() {
+                $(".whitePiece").click(function() {
+                    if($(this).hasClass("selected")) {
+                        $(".selected").each(function() {
+                            $(this).removeClass("selected");
+                        });
+                    } else {
+                        $(".selected").each(function() {
+                            $(this).removeClass("selected");
+                        });
+                        $(this).addClass("selected");
+                    }
+                });
+            });
+        </script>
     </body>
 </html>
