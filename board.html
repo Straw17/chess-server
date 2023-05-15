@@ -8,11 +8,33 @@ Light Squares: #f0d9b5
 <html>
     <head>
         <style>
+            #result {
+                text-align: center;
+            }
+
+            #turn {
+                text-align: center;
+            }
+
             #board {
                 border:solid 3px black;
                 margin:0 auto;
                 display: flex;
                 flex-wrap: wrap;
+            }
+
+            #board-expanded {
+                display: flex;
+                width: 560px;
+                margin:0 auto;
+            }
+
+            .sidebar {
+                border:solid 3px black;
+                margin:0 auto;
+                display: flex;
+                flex-wrap: wrap;
+                flex-direction: column;
             }
 
             .square {
@@ -26,10 +48,15 @@ Light Squares: #f0d9b5
                 
                 display: flex;
                 justify-content: center;
+                align-items: center;
             }
 
             .square.selected {
                 filter: brightness(50%);
+            }
+
+            .square.marked {
+                filter: brightness(70%);
             }
 
             .square.black {
@@ -39,12 +66,42 @@ Light Squares: #f0d9b5
             .square.white {
                 background: #f0d9b5;
             }
+
+            .dot-active {
+                height: 15px;
+                width: 15px;
+                background-color: rgba(85, 85, 85, 0.8);
+                border-radius: 50%;
+                display: inline-block;
+            }
+
+            .hidden {
+                display: none
+            }
+
+            .clickable {
+                cursor: pointer;
+            }
         </style>
 
         <script src="jquery-3.6.0.min.js"></script>
     </head>
     <body>
-        <div id="board"></div>
+        <div id="turn">
+            <h3>Turn: <span id="turn-text"></span></h3>
+        </div>
+
+        <div id="result" class="hidden">
+            <h3>Game Result: <span id="result-text"></span></h3>
+        </div>
+
+        <div id="board-expanded">
+            <div class="sidebar" id="white-sidebar" data-size="0">
+            </div>
+            <div id="board"></div>
+            <div class="sidebar" id="black-sidebar" data-size="0">
+            </div>
+        </div>
 
         <script>
             //regex helpers
@@ -57,7 +114,7 @@ Light Squares: #f0d9b5
             }
 
             //templates
-            function square(color, row, col) {
+            function boardSquare(color, row, col) {
                 return `<div class = "square ${color}" id="r${row}c${col}"></div>`;
             }
 
@@ -65,50 +122,71 @@ Light Squares: #f0d9b5
                 return `<img src="pieces/${piece}.svg">`;
             }
 
+            function sidebarSquare(piece) {
+                return `<div class = "square">` + chessPiece(piece) + `</div>`;
+            }
+
+            function dot() {
+                return `<span class="dot-inactive"></span>`;
+            }
+
+            //initial information
+            var height = 8;
+            var width = 8;
+            var playerWhite = true;
+            var playerColor = playerWhite ? "white" : "black";
+            var startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+            var currentFEN = "2Q1b3/p2q3k/1rp2n1p/3p1pp1/3Pp3/1P2P2P/P1R1NPP1/2R3K1"; //rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R
+
             //board construction
             var board = $("#board").get(0);
-
-            function constructBoard(isWhite, height, width) {
+            function constructBoard(isWhite) {
                 board.style.height = 53*height + "px";
                 board.style.width = 53*width + "px";
 
                 var color;
-                if(!isWhite) {
-                    for(var r = 0; r < height; r++) {
+                if(isWhite) {
+                    for(var r = height-1; r >= 0; r--) {
                         for(var c = 0; c < width; c++) {
                             if(r % 2 == 0) {
                                 color = (c % 2 === 0 ? "white" : "black");
                             } else {
                                 color = (c % 2 === 0 ? "black" : "white");
                             }
-                            board.insertAdjacentHTML("beforeend", square(color, r, c))
+                            board.insertAdjacentHTML("beforeend", boardSquare(color, r, c));
+                            $(`#r${r}c${c}`).get(0).insertAdjacentHTML("beforeend", dot());
                         }
                     }
                 } else {
-                    for(var r = height-1; r >= 0; r--) {
+                    for(var r = 0; r < height; r++) {
                         for(var c = width-1; c >= 0; c--) {
                             if(r % 2 == 0) {
                                 color = (c % 2 === 0 ? "white" : "black");
                             } else {
                                 color = (c % 2 === 0 ? "black" : "white");
                             }
-                            board.insertAdjacentHTML("beforeend", square(color, r, c))
+                            board.insertAdjacentHTML("beforeend", boardSquare(color, r, c));
+                            $(`#r${r}c${c}`).get(0).insertAdjacentHTML("beforeend", dot());
                         }
                     }
                 }
             }
 
+            //adding pieces to the board
             var pieceRegex = new RegExp("[a-z][A-Z]");
-            function changePieces(FEN) {
+            function getBoardArray(FEN) {
                 var FENRows = FEN.split("/");
-                var boardArray = new Array(8);
-                for(var r = 0; r < 8; r++) {
+                var boardArray = new Array(height);
+                for(var r = 0; r < height; r++) {
                     boardArray[r] = FENRows[r].split("");
+                    //boardArray[r].reverse();
                 }
+                boardArray.reverse();
 
+                //build board state array
                 var piece;
-                for(var r = 0; r < 8; r++) {
-                    var newRow = new Array(8);
+                for(var r = 0; r < height; r++) {
+                    var newRow = new Array(width);
                     var colIndex = 0;
 
                     for(var c = 0; c < boardArray[r].length; c++) {
@@ -133,20 +211,30 @@ Light Squares: #f0d9b5
                     boardArray[r] = newRow;
                 }
 
+                return boardArray;
+            }
+
+            var currentBoard = getBoardArray(currentFEN);
+            function changePieces(FEN) {
+                boardArray = getBoardArray(FEN);
+
+                console.log(boardArray);
+
+                //populate with info
                 var activeSquare;
-                for(var r = 0; r < 8; r++) {
-                    for(var c = 0; c < 8; c++) {
+                for(var r = 0; r < height; r++) {
+                    for(var c = 0; c < width; c++) {
                         activeSquare = $(`#r${r}c${c}`).get(0);
                         if(!(boardArray[r][c] === "")) {
-                            activeSquare.innerHTML = chessPiece(boardArray[r][c]);
+                            activeSquare.insertAdjacentHTML('beforeend', chessPiece(boardArray[r][c]));
                             if(boardArray[r][c].charAt(0) === "b") {
                                 activeSquare.classList.add("blackPiece");
                             } else {
                                 activeSquare.classList.add("whitePiece");
                             }
-                            activeSquare.classList.add(boardArray[r][c]);
+                            activeSquare.dataset.piece = boardArray[r][c];
                         } else {
-                            activeSquare.innerHTML = "";
+                            $(`#r${r}c${c}`).find("img").remove();
                             activeSquare.classList.remove("blackPiece");
                             activeSquare.classList.remove("whitePiece");
                             activeSquare.className = activeSquare.className.replace(pieceRegex, "");
@@ -155,24 +243,342 @@ Light Squares: #f0d9b5
                 }
             }
 
-            constructBoard(false, 8, 8);
-            //changePieces("rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R");
+            //dot / mark management
+            function addIndicator(row, col) {
+                if(occupied(row, col)) {
+                    addMark(row, col);
+                    removeDot(row, col);
+                } else {
+                    addDot(row, col);
+                    removeMark(row, col);
+                }
+            }
 
+            function removeIndicator(row, col) {
+                removeDot(row, col);
+                removeMark(row, col);
+            }
+
+            function addMark(row, col) {
+                var square = $(`#r${row}c${col}`);
+                square.addClass("marked");
+            }
+
+            function removeMark(row, col) {
+                var square = $(`#r${row}c${col}`);
+                square.removeClass("marked");
+            }
+
+            function addDot(row, col) {
+                var dot = $(`#r${row}c${col}`).find("span").get(0);
+                dot.className = dot.className.replace("dot-inactive", "dot-active");
+            }
+
+            function removeDot(row, col) {
+                var dot = $(`#r${row}c${col}`).find("span").get(0);
+                dot.className = dot.className.replace("dot-active", "dot-inactive");
+            }
+
+            //sidebar management
+            function constructBoardContainer(whiteSidebarWidth, blackSidebarWidth) {
+                var totalWidth = width + whiteSidebarWidth + blackSidebarWidth;
+
+                var boardExpanded = $("#board-expanded").get(0);
+                var whiteSidebar = $("#white-sidebar").get(0);
+                var blackSidebar = $("#black-sidebar").get(0);
+
+                boardExpanded.style.width = (53*totalWidth + 30) + "px";
+                whiteSidebar.style.width = 53*whiteSidebarWidth + "px";
+                blackSidebar.style.width = 53*blackSidebarWidth + "px";
+
+                boardExpanded.style.height = 53*height + "px";
+                whiteSidebar.style.height = 53*height + "px";
+                blackSidebar.style.height = 53*height + "px";
+
+                boardExpanded.style.paddingLeft = "0px";
+                boardExpanded.style.paddingRight = "0px";
+                if(whiteSidebarWidth < blackSidebarWidth) {
+                    boardExpanded.style.paddingLeft = 53*(blackSidebarWidth-whiteSidebarWidth) + "px";
+                } else if(blackSidebarWidth < whiteSidebarWidth) {
+                    boardExpanded.style.paddingRight = 53*(whiteSidebarWidth-blackSidebarWidth) + "px";
+                }
+            }
+
+            function addSidebarPiece(piece) {
+                var whiteSidebar = $("#white-sidebar").get(0);
+                var blackSidebar = $("#black-sidebar").get(0);
+
+                if(piece.charAt(0) === "w") {
+                    whiteSidebar.insertAdjacentHTML("beforeend", sidebarSquare(piece));
+                    whiteSidebar.dataset.size = parseInt(whiteSidebar.dataset.size) + 1;
+                } else {
+                    blackSidebar.insertAdjacentHTML("beforeend", sidebarSquare(piece));
+                    blackSidebar.dataset.size = parseInt(blackSidebar.dataset.size) + 1;
+                }
+
+                var whiteSidebarSize = whiteSidebar.dataset.size;
+                var blackSidebarSize = blackSidebar.dataset.size;
+
+                constructBoardContainer(Math.max(1,Math.ceil(whiteSidebarSize / height)), 
+                                        Math.max(1,Math.ceil(blackSidebarSize / height)));
+            }
+
+            //move profiling
+            function getMoveProfile() {
+                var profile = new Array(height);
+                for(var r = 0; r < height; r++) {
+                    profile[r] = new Array(width);
+                    for(var c = 0; c < width; c++) {
+                        profile[r][c] = false;
+                    }
+                }
+
+                return profile;
+            }
+
+            function inBounds(row, col) {
+                var rowInBounds = (row >= 0) && (row < height);
+                var colInBounds = (col >= 0) && (col < width);
+                return rowInBounds && colInBounds;
+            }
+
+            function whiteOccupied(row, col) {
+                return $(`#r${row}c${col}`).hasClass("whitePiece");
+            }
+
+            function blackOccupied(row, col) {
+                return $(`#r${row}c${col}`).hasClass("blackPiece");
+            }
+
+            function occupied(row, col) {
+                return whiteOccupied(row, col) || blackOccupied(row, col);
+            }
+
+            //todo: figure out first move stuff
+            function getPawnMoves(profile, row, col, isWhite) {
+                var direction; var friendlyOccupied; var enemyOccupied;
+                if(isWhite) {
+                    direction = 1;
+                    friendlyOccupied = whiteOccupied;
+                    enemyOccupied = blackOccupied;
+                } else {
+                    direction = -1;
+                    friendlyOccupied = blackOccupied;
+                    enemyOccupied = whiteOccupied;
+                }
+
+                var goalRow = row + direction;
+                if(inBounds(goalRow, col-1) && enemyOccupied(goalRow, col-1)) {
+                    profile[goalRow][col-1] = true;
+                }
+                if(inBounds(goalRow, col+1) && enemyOccupied(goalRow, col+1)) {
+                    profile[goalRow][col+1] = true;
+                }
+
+                if(inBounds(goalRow, col) && !occupied(goalRow, col)) {
+                    profile[goalRow][col] = true;
+
+                    var goalRow2 = goalRow + direction;
+                    if(inBounds(goalRow2, col) && !occupied(goalRow2, col)) {
+                        profile[goalRow2][col] = true;
+                    }
+                }
+
+                return profile;
+            }
+
+            function getBishopMoves(profile, row, col, isWhite) {
+                var friendlyOccupied; var enemyOccupied;
+                if(isWhite) {
+                    friendlyOccupied = whiteOccupied;
+                    enemyOccupied = blackOccupied;
+                } else {
+                    friendlyOccupied = blackOccupied;
+                    enemyOccupied = whiteOccupied;
+                }
+
+                var directions = [
+                    [ 1,  1],
+                    [ 1, -1],
+                    [-1,  1],
+                    [-1, -1]
+                ]
+
+                for(var d = 0; d < directions.length; d++) {
+                    var nextRow; var nextCol;
+                    var i = 1;
+                    while(true) {
+                        nextRow = row + i*directions[d][0];
+                        nextCol = col + i*directions[d][1];
+                        if(!inBounds(nextRow, nextCol) || friendlyOccupied(nextRow, nextCol)) {
+                            break;
+                        } else if(enemyOccupied(nextRow, nextCol)) {
+                            profile[nextRow][nextCol] = true;
+                            break;
+                        } else {
+                            profile[nextRow][nextCol] = true;
+                        }
+                        i++;
+                    }
+                }
+
+                return profile;
+            }
+
+            function getRookMoves(profile, row, col, isWhite) {
+                var friendlyOccupied; var enemyOccupied;
+                if(isWhite) {
+                    friendlyOccupied = whiteOccupied;
+                    enemyOccupied = blackOccupied;
+                } else {
+                    friendlyOccupied = blackOccupied;
+                    enemyOccupied = whiteOccupied;
+                }
+
+                var directions = [
+                    [ 0,  1],
+                    [ 0, -1],
+                    [ 1,  0],
+                    [-1,  0]
+                ]
+
+                for(var d = 0; d < directions.length; d++) {
+                    var nextRow; var nextCol;
+                    var i = 1;
+                    while(true) {
+                        nextRow = row + i*directions[d][0];
+                        nextCol = col + i*directions[d][1];
+                        if(!inBounds(nextRow, nextCol) || friendlyOccupied(nextRow, nextCol)) {
+                            break;
+                        } else if(enemyOccupied(nextRow, nextCol)) {
+                            profile[nextRow][nextCol] = true;
+                            break;
+                        } else {
+                            profile[nextRow][nextCol] = true;
+                        }
+                        i++;
+                    }
+                }
+
+                return profile;
+            }
+
+            function getVizierMoves(profile, row, col, isWhite) {
+                var friendlyOccupied; var enemyOccupied;
+                if(isWhite) {
+                    friendlyOccupied = whiteOccupied;
+                    enemyOccupied = blackOccupied;
+                } else {
+                    friendlyOccupied = blackOccupied;
+                    enemyOccupied = whiteOccupied;
+                }
+
+                var directions = [
+                    [ 1,  1],
+                    [ 1, -1],
+                    [-1,  1],
+                    [-1, -1]
+                ]
+
+                for(var d = 0; d < directions.length; d++) {
+                    var nextRow; var nextCol;
+                    
+                    nextRow = row + directions[d][0];
+                    nextCol = col + directions[d][1];
+                    if(inBounds(nextRow, nextCol) && !friendlyOccupied(nextRow, nextCol)) {
+                        profile[nextRow][nextCol] = true;
+                    }
+                }
+
+                return profile;
+            }
+
+            function getFerzMoves(profile, row, col, isWhite) {
+                var friendlyOccupied; var enemyOccupied;
+                if(isWhite) {
+                    friendlyOccupied = whiteOccupied;
+                    enemyOccupied = blackOccupied;
+                } else {
+                    friendlyOccupied = blackOccupied;
+                    enemyOccupied = whiteOccupied;
+                }
+
+                var directions = [
+                    [ 0,  1],
+                    [ 0, -1],
+                    [ 1,  0],
+                    [-1,  0]
+                ]
+
+                for(var d = 0; d < directions.length; d++) {
+                    var nextRow; var nextCol;
+                    
+                    nextRow = row + directions[d][0];
+                    nextCol = col + directions[d][1];
+                    if(inBounds(nextRow, nextCol) && !friendlyOccupied(nextRow, nextCol)) {
+                        profile[nextRow][nextCol] = true;
+                    }
+                }
+
+                return profile;
+            }
+
+            constructBoardContainer(1, 1);
+            constructBoard(playerWhite);
+            changePieces(currentFEN);
+
+            function toggleClickable() {
+                if(whiteTurn == playerWhite) {
+                    $(`.${playerColor}Piece`).each(function() {
+                        $(this).addClass("clickable");
+                    });
+                } else {
+                    $(".clickable").each(function() {
+                        $(this).removeClass("clickable");
+                    });
+                }
+            }
+
+            var whiteTurn = true;
             //manage click events
             $("document").ready(function() {
-                $(".whitePiece").click(function() {
-                    if($(this).hasClass("selected")) {
-                        $(".selected").each(function() {
-                            $(this).removeClass("selected");
-                        });
-                    } else {
-                        $(".selected").each(function() {
-                            $(this).removeClass("selected");
-                        });
-                        $(this).addClass("selected");
+                $(`.${playerColor}Piece`).click(function() {
+                    if(whiteTurn == playerWhite) { //if player's turn
+                        if($(this).hasClass("selected")) {
+                            $(".selected").each(function() {
+                                $(this).removeClass("selected");
+                            });
+                        } else {
+                            $(".selected").each(function() {
+                                $(this).removeClass("selected");
+                            });
+                            $(this).addClass("selected");
+                        }
                     }
                 });
             });
+
+            toggleClickable();
+
+            $("document").ready(function() {
+                $(".blackPiece, .whitePiece").click(function() {
+                    console.log("click!");
+                    addSidebarPiece($(this).get(0).dataset.piece);
+                });
+            });
+
+            var prof = getMoveProfile();
+            prof = getVizierMoves(prof,6,7,false);
+            prof = getFerzMoves(prof,6,7,false);
+            for(var r = 0; r < height; r++) {
+                    for(var c = 0; c < width; c++) {
+                        if(prof[r][c]) {
+                            addIndicator(r,c);
+                        } else {
+                            removeIndicator(r,c);
+                        }
+                    }
+                }
         </script>
     </body>
 </html>
