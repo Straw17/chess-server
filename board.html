@@ -8,6 +8,7 @@ Light Squares: #f0d9b5
 <html>
     <head>
         <style>
+            /*general layout*/
             #result {
                 text-align: center;
             }
@@ -37,6 +38,18 @@ Light Squares: #f0d9b5
                 flex-direction: column;
             }
 
+            #promotion-bar {
+                border:solid 3px black;
+                margin:0 auto;
+                margin-bottom: 5px;
+                display: flex;
+                flex-wrap: wrap;
+                flex-direction: row;
+
+                height: 53px;
+            }
+
+            /*squares*/
             .square {
                 width: 53px;
                 height: 53px;
@@ -51,12 +64,11 @@ Light Squares: #f0d9b5
                 align-items: center;
             }
 
-            .square.selected {
-                filter: brightness(50%);
-            }
-
             .square.marked {
-                filter: brightness(70%);
+                box-shadow: 0 3px 0 #f00 inset,
+                            3px 0 0 #f00 inset,
+                            0 -3px 0 #f00 inset,
+                            -3px 0 0 #f00 inset;
             }
 
             .square.black {
@@ -67,6 +79,11 @@ Light Squares: #f0d9b5
                 background: #f0d9b5;
             }
 
+            .square.promotion {
+                cursor: pointer;
+            }
+
+            /*markings*/
             .dot-active {
                 height: 15px;
                 width: 15px;
@@ -75,14 +92,21 @@ Light Squares: #f0d9b5
                 display: inline-block;
             }
 
+            .has-indicator {
+                cursor: pointer;
+            }
+
+            /*other flags*/
             .hidden {
-                display: none
+                display: none !important;
             }
 
             .clickable {
                 cursor: pointer;
             }
         </style>
+
+        <link rel="stylesheet" href="selected-square.css">
 
         <script src="jquery-3.6.0.min.js"></script>
     </head>
@@ -95,15 +119,46 @@ Light Squares: #f0d9b5
             <h3>Game Result: <span id="result-text"></span></h3>
         </div>
 
+        <div id="promotion-bar" class="hidden"></div>
+
         <div id="board-expanded">
-            <div class="sidebar" id="white-sidebar" data-size="0">
-            </div>
+            <div class="sidebar" id="white-sidebar" data-size="0"></div>
             <div id="board"></div>
-            <div class="sidebar" id="black-sidebar" data-size="0">
-            </div>
+            <div class="sidebar" id="black-sidebar" data-size="0"></div>
         </div>
 
         <script>
+            //information to remove
+            var startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+            //var currentFEN = "rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R";
+            var currentFEN = "2Q1b3/p2q3k/1rp2n1p/3p1pp1/3Pp3/1P2P2P/P1R1NPP1/2R3K1";
+
+            //initial information
+            var height = 8;
+            var width = 8;
+            var playerWhite = true;
+            var startBoard = getBoardArray(startFEN);
+            var playerColor = playerWhite ? "white" : "black";
+
+            var whitePieceSet = ["P", "K", "B", "N", "R", "Q"];
+            var blackPieceSet = ["P", "K", "B", "N", "R", "Q"];
+
+            //turn-by-turn information
+            var whiteTurn = true;
+            var currentBoard = getBoardArray(currentFEN);
+
+            var whiteSidebar = new Array(0);
+            var blackSidebar = new Array(0);
+
+            var gameOver = false;
+            var whiteWinner = false;
+
+            //comparison helpers
+            var pieceOrdering = ["P", "F", "V", "B", "N", "M", "R", "A", "C", "Q", "D"];
+            function comparePieces(piece1, piece2) {
+                return pieceOrdering.indexOf(piece2) - pieceOrdering.indexOf(piece1);
+            }
+
             //regex helpers
             function isAlphaUpper(ch){
                 return /^[A-Z]+$/.test(ch);
@@ -126,17 +181,13 @@ Light Squares: #f0d9b5
                 return `<div class = "square">` + chessPiece(piece) + `</div>`;
             }
 
+            function promotionSquare(piece) {
+                return `<div class = "square promotion">` + chessPiece(piece) + `</div>`;
+            }
+
             function dot() {
                 return `<span class="dot-inactive"></span>`;
             }
-
-            //initial information
-            var height = 8;
-            var width = 8;
-            var playerWhite = true;
-            var playerColor = playerWhite ? "white" : "black";
-            var startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
-            var currentFEN = "2Q1b3/p2q3k/1rp2n1p/3p1pp1/3Pp3/1P2P2P/P1R1NPP1/2R3K1"; //rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R
 
             //board construction
             var board = $("#board").get(0);
@@ -172,14 +223,51 @@ Light Squares: #f0d9b5
                 }
             }
 
-            //adding pieces to the board
+            //promotion bar
+            function constructPromotionBar() {
+                var promotionBar = $("#promotion-bar").get(0);
+                var barPieces = 0;
+
+                var piece;
+                if(playerWhite) {
+                    for(var i = 0; i < whitePieceSet.length; i++) {
+                        if(whitePieceSet[i] === "P" || whitePieceSet[i] === "K") {
+                            continue;
+                        } else {
+                            piece = "w" + whitePieceSet[i];
+                            promotionBar.insertAdjacentHTML("beforeend", promotionSquare(piece));
+                            barPieces += 1;
+                        }
+                    }
+                } else {
+                    for(var i = 0; i < blackPieceSet.length; i++) {
+                        if(blackPieceSet[i] === "P" || blackPieceSet[i] === "K") {
+                            continue;
+                        } else {
+                            piece = "b" + blackPieceSet[i].toLowerCase();
+                            promotionBar.insertAdjacentHTML("beforeend", promotionSquare(piece));
+                            barPieces += 1;
+                        }
+                    }
+                }
+                promotionBar.style.width = 53*barPieces + "px";
+            }
+
+            function showPromotionBar() {
+                $("#promotion-bar").removeClass("hidden");
+            }
+
+            function hidePromotionBar() {
+                $("#promotion-bar").addClass("hidden");
+            }
+
+            //board management
             var pieceRegex = new RegExp("[a-z][A-Z]");
             function getBoardArray(FEN) {
                 var FENRows = FEN.split("/");
                 var boardArray = new Array(height);
                 for(var r = 0; r < height; r++) {
                     boardArray[r] = FENRows[r].split("");
-                    //boardArray[r].reverse();
                 }
                 boardArray.reverse();
 
@@ -214,17 +302,13 @@ Light Squares: #f0d9b5
                 return boardArray;
             }
 
-            var currentBoard = getBoardArray(currentFEN);
-            function changePieces(FEN) {
-                boardArray = getBoardArray(FEN);
-
-                console.log(boardArray);
-
+            function changePieces(boardArray) {
                 //populate with info
                 var activeSquare;
                 for(var r = 0; r < height; r++) {
                     for(var c = 0; c < width; c++) {
                         activeSquare = $(`#r${r}c${c}`).get(0);
+                        $(`#r${r}c${c}`).find("img").remove();
                         if(!(boardArray[r][c] === "")) {
                             activeSquare.insertAdjacentHTML('beforeend', chessPiece(boardArray[r][c]));
                             if(boardArray[r][c].charAt(0) === "b") {
@@ -232,19 +316,59 @@ Light Squares: #f0d9b5
                             } else {
                                 activeSquare.classList.add("whitePiece");
                             }
-                            activeSquare.dataset.piece = boardArray[r][c];
                         } else {
-                            $(`#r${r}c${c}`).find("img").remove();
                             activeSquare.classList.remove("blackPiece");
                             activeSquare.classList.remove("whitePiece");
                             activeSquare.className = activeSquare.className.replace(pieceRegex, "");
+                        }
+                        activeSquare.dataset.piece = boardArray[r][c];
+                    }
+                }
+            }
+
+            function makeMove(boardArray, startRow, startCol, endRow, endCol) {
+                var startPiece = boardArray[startRow][startCol];
+                var endPiece = boardArray[endRow][endCol];
+
+                boardArray[endRow][endCol] = startPiece;
+                boardArray[startRow][startCol] = "";
+
+                if(!(endPiece === "")) {
+                    if(endPiece.charAt(0) === "w") {
+                        whiteSidebar.push(endPiece.charAt(1));
+                        whiteSidebar.sort(comparePieces);
+                    } else {
+                        blackSidebar.push(endPiece.charAt(1));
+                        blackSidebar.sort(comparePieces);
+                    }
+                }
+
+                return boardArray;
+            }
+
+            //dot / mark management
+            function addAllIndicators(profile) {
+                for(var r = 0; r < height; r++) {
+                    for(var c = 0; c < width; c++) {
+                        if(profile[r][c]) {
+                            addIndicator(r,c);
+                        } else {
+                            removeIndicator(r,c);
                         }
                     }
                 }
             }
 
-            //dot / mark management
+            function removeAllIndicators(profile) {
+                for(var r = 0; r < height; r++) {
+                    for(var c = 0; c < width; c++) {
+                        removeIndicator(r,c);
+                    }
+                }
+            }
+
             function addIndicator(row, col) {
+                $(`#r${row}c${col}`).addClass("has-indicator");
                 if(occupied(row, col)) {
                     addMark(row, col);
                     removeDot(row, col);
@@ -255,6 +379,7 @@ Light Squares: #f0d9b5
             }
 
             function removeIndicator(row, col) {
+                $(`#r${row}c${col}`).removeClass("has-indicator");
                 removeDot(row, col);
                 removeMark(row, col);
             }
@@ -277,6 +402,54 @@ Light Squares: #f0d9b5
             function removeDot(row, col) {
                 var dot = $(`#r${row}c${col}`).find("span").get(0);
                 dot.className = dot.className.replace("dot-active", "dot-inactive");
+            }
+
+            //square selection
+            function toggleClickable() {
+                $(".clickable").each(function() {
+                    $(this).removeClass("clickable");
+                });
+
+                if(whiteTurn == playerWhite) {
+                    $(`.${playerColor}Piece`).each(function() {
+                        $(this).addClass("clickable");
+                    });
+                }
+            }
+
+            function selectSquare(row, col) {
+                $(".selected").each(function() {
+                    $(this).removeClass("selected");
+                });
+
+                $(`#r${row}c${col}`).addClass("selected");
+
+                var extraClass = "";
+                if(row == 0) {
+                    extraClass += "bottom";
+                } else if(row == height-1) {
+                    extraClass += "top";
+                }
+
+                if(col == 0) {
+                    if(!(extraClass === "")) {
+                        extraClass += "-";
+                    }
+                    extraClass += "left";
+                } else if(col == width-1) {
+                    if(!(extraClass === "")) {
+                        extraClass += "-";
+                    }
+                    extraClass += "right";
+                }
+
+                $(`#r${row}c${col}`).addClass(extraClass);
+            }
+
+            function removeSelection() {
+                $(".selected").each(function() {
+                    $(this).removeClass("selected");
+                });
             }
 
             //sidebar management
@@ -305,20 +478,35 @@ Light Squares: #f0d9b5
             }
 
             function addSidebarPiece(piece) {
-                var whiteSidebar = $("#white-sidebar").get(0);
-                var blackSidebar = $("#black-sidebar").get(0);
+                var whiteSidebarElement = $("#white-sidebar").get(0);
+                var blackSidebarElement = $("#black-sidebar").get(0);
 
                 if(piece.charAt(0) === "w") {
-                    whiteSidebar.insertAdjacentHTML("beforeend", sidebarSquare(piece));
-                    whiteSidebar.dataset.size = parseInt(whiteSidebar.dataset.size) + 1;
+                    whiteSidebarElement.insertAdjacentHTML("beforeend", sidebarSquare(piece));
+                    whiteSidebarElement.dataset.size = parseInt(whiteSidebarElement.dataset.size) + 1;
                 } else {
-                    blackSidebar.insertAdjacentHTML("beforeend", sidebarSquare(piece));
-                    blackSidebar.dataset.size = parseInt(blackSidebar.dataset.size) + 1;
+                    blackSidebarElement.insertAdjacentHTML("beforeend", sidebarSquare(piece));
+                    blackSidebarElement.dataset.size = parseInt(blackSidebarElement.dataset.size) + 1;
+                }
+            }
+
+            function updateSidebarView() {
+                $(".sidebar").find("div").remove();
+
+                var whiteSidebarElement = $("#white-sidebar").get(0);
+                var blackSidebarElement = $("#black-sidebar").get(0);
+                whiteSidebarElement.dataset.size = 0;
+                blackSidebarElement.dataset.size = 0;
+
+                for(var i = 0; i < whiteSidebar.length; i++) {
+                    addSidebarPiece("w" + whiteSidebar[i]);
+                }
+                for(var i = 0; i < blackSidebar.length; i++) {
+                    addSidebarPiece("b" + blackSidebar[i]);
                 }
 
-                var whiteSidebarSize = whiteSidebar.dataset.size;
-                var blackSidebarSize = blackSidebar.dataset.size;
-
+                var whiteSidebarSize = whiteSidebarElement.dataset.size;
+                var blackSidebarSize = blackSidebarElement.dataset.size;
                 constructBoardContainer(Math.max(1,Math.ceil(whiteSidebarSize / height)), 
                                         Math.max(1,Math.ceil(blackSidebarSize / height)));
             }
@@ -523,62 +711,154 @@ Light Squares: #f0d9b5
                 return profile;
             }
 
-            constructBoardContainer(1, 1);
-            constructBoard(playerWhite);
-            changePieces(currentFEN);
-
-            function toggleClickable() {
-                if(whiteTurn == playerWhite) {
-                    $(`.${playerColor}Piece`).each(function() {
-                        $(this).addClass("clickable");
-                    });
+            function getKnightMoves(profile, row, col, isWhite) {
+                var friendlyOccupied; var enemyOccupied;
+                if(isWhite) {
+                    friendlyOccupied = whiteOccupied;
+                    enemyOccupied = blackOccupied;
                 } else {
-                    $(".clickable").each(function() {
-                        $(this).removeClass("clickable");
-                    });
+                    friendlyOccupied = blackOccupied;
+                    enemyOccupied = whiteOccupied;
                 }
+
+                var directions = [
+                    [ 2,  1],
+                    [ 2, -1],
+                    [ 1,  2],
+                    [-1,  2],
+                    [-2,  1],
+                    [-2, -1],
+                    [ 1, -2],
+                    [-1, -2]
+                ]
+
+                for(var d = 0; d < directions.length; d++) {
+                    var nextRow; var nextCol;
+                    
+                    nextRow = row + directions[d][0];
+                    nextCol = col + directions[d][1];
+                    if(inBounds(nextRow, nextCol) && !friendlyOccupied(nextRow, nextCol)) {
+                        profile[nextRow][nextCol] = true;
+                    }
+                }
+
+                return profile;
             }
 
-            var whiteTurn = true;
-            //manage click events
-            $("document").ready(function() {
-                $(`.${playerColor}Piece`).click(function() {
-                    if(whiteTurn == playerWhite) { //if player's turn
-                        if($(this).hasClass("selected")) {
-                            $(".selected").each(function() {
-                                $(this).removeClass("selected");
-                            });
-                        } else {
-                            $(".selected").each(function() {
-                                $(this).removeClass("selected");
-                            });
-                            $(this).addClass("selected");
-                        }
-                    }
-                });
-            });
+            function getPieceMoves(row, col) {
+                var pieceID = $(`#r${row}c${col}`).data("piece");
+                var isWhite = (pieceID.charAt(0) === "w");
+                var piece = pieceID.charAt(1).toUpperCase();
 
+                var profile = getMoveProfile();
+
+                switch(piece) {
+                    case "P": //pawn
+                        profile = getPawnMoves(profile, row, col, isWhite);
+                        break;
+                    case "F": //ferz
+                        profile = getFerzMoves(profile, row, col, isWhite);
+                        break;
+                    case "V": //vizier
+                        profile = getVizierMoves(profile, row, col, isWhite);
+                        break;
+                    case "K": //king
+                        profile = getFerzMoves(profile, row, col, isWhite);
+                        profile = getVizierMoves(profile, row, col, isWhite);
+                        break;
+                    case "M": //man
+                        profile = getFerzMoves(profile, row, col, isWhite);
+                        profile = getVizierMoves(profile, row, col, isWhite);
+                        break;
+                    case "N": //knight
+                        profile = getKnightMoves(profile, row, col, isWhite);
+                        break;
+                    case "B": //bishop
+                        profile = getBishopMoves(profile, row, col, isWhite);
+                        break;
+                    case "R": //rook
+                        profile = getRookMoves(profile, row, col, isWhite);
+                        break;
+                    case "A": //archbishop
+                        profile = getKnightMoves(profile, row, col, isWhite);
+                        profile = getBishopMoves(profile, row, col, isWhite);
+                        break;
+                    case "C": //chancellor
+                        profile = getKnightMoves(profile, row, col, isWhite);
+                        profile = getRookMoves(profile, row, col, isWhite);
+                        break;
+                    case "Q": //queen
+                        profile = getBishopMoves(profile, row, col, isWhite);
+                        profile = getRookMoves(profile, row, col, isWhite);
+                        break;
+                    case "D": //dragon
+                        profile = getKnightMoves(profile, row, col, isWhite);
+                        profile = getBishopMoves(profile, row, col, isWhite);
+                        profile = getRookMoves(profile, row, col, isWhite);
+                        break;
+                }
+
+                return profile;
+            }
+
+            //initialization
+            constructBoardContainer(1, 1);
+            constructPromotionBar();
+            constructBoard(playerWhite);
+            changePieces(currentBoard);
             toggleClickable();
 
-            $("document").ready(function() {
-                $(".blackPiece, .whitePiece").click(function() {
-                    console.log("click!");
-                    addSidebarPiece($(this).get(0).dataset.piece);
+            //manage click events
+            $("document").ready(function() { //manage piece selections
+                $(".square").click(function() {
+                    if($(this).hasClass("clickable")) {
+                        if($(this).hasClass("selected")) {
+                            removeSelection();
+                            removeAllIndicators();
+                        } else {
+                            var row = parseInt($(this).get(0).id.charAt(1));
+                            var col = parseInt($(this).get(0).id.charAt(3));
+                            selectSquare(row, col);
+                            var profile = getPieceMoves(row, col);
+                            addAllIndicators(profile);
+                        }
+                    }
                 });
             });
 
-            var prof = getMoveProfile();
-            prof = getVizierMoves(prof,6,7,false);
-            prof = getFerzMoves(prof,6,7,false);
-            for(var r = 0; r < height; r++) {
-                    for(var c = 0; c < width; c++) {
-                        if(prof[r][c]) {
-                            addIndicator(r,c);
-                        } else {
-                            removeIndicator(r,c);
-                        }
+            $("document").ready(function() { //manage moves
+                $(".square").click(function() {
+                    if($(this).hasClass("has-indicator")) {
+                        var selection = $(".selected").get(0);
+
+                        var startRow = parseInt(selection.id.charAt(1));
+                        var startCol = parseInt(selection.id.charAt(3));
+
+                        var endRow = parseInt($(this).get(0).id.charAt(1));
+                        var endCol = parseInt($(this).get(0).id.charAt(3));
+
+                        currentBoard = makeMove(currentBoard, startRow, startCol, endRow, endCol);
+                        console.log(currentBoard);
+                        removeAllIndicators();
+                        removeSelection()
+                        changePieces(currentBoard);
+                        toggleClickable();
+                        updateSidebarView();
                     }
-                }
+                });
+            });
+
+            /*$("document").ready(function() {
+                $(".square.promotion").click(function() {
+                    
+                });
+            });*/
+
+            /*$("document").ready(function() {
+                $(".blackPiece, .whitePiece").click(function() {
+                    addSidebarPiece($(this).get(0).dataset.piece);
+                });
+            });*/
         </script>
     </body>
 </html>

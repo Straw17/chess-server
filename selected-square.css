@@ -1,0 +1,50 @@
+.square.selected {
+    box-shadow: 0 3px 0 #000 inset,
+                3px 0 0 #000 inset,
+                0 -3px 0 #000 inset,
+                -3px 0 0 #000 inset;
+}
+
+.square.selected.top {
+    box-shadow: 3px 0 0 #000 inset,
+                0 -3px 0 #000 inset,
+                -3px 0 0 #000 inset;
+}
+
+.square.selected.left {
+    box-shadow: 0 3px 0 #000 inset,
+                0 -3px 0 #000 inset,
+                -3px 0 0 #000 inset;
+}
+
+.square.selected.bottom {
+    box-shadow: 0 3px 0 #000 inset,
+                3px 0 0 #000 inset,
+                -3px 0 0 #000 inset;
+}
+
+.square.selected.right {
+    box-shadow: 0 3px 0 #000 inset,
+                3px 0 0 #000 inset,
+                0 -3px 0 #000 inset;
+}
+
+.square.selected.top-left {
+    box-shadow: 0 -3px 0 #000 inset,
+                -3px 0 0 #000 inset;
+}
+
+.square.selected.top-right {
+    box-shadow: 0 -3px 0 #000 inset,
+                3px 0 0 #000 inset;
+}
+
+.square.selected.bottom-left {
+    box-shadow: 0 3px 0 #000 inset,
+                -3px 0 0 #000 inset;
+}
+
+.square.selected.bottom-right {
+    box-shadow: 0 3px 0 #000 inset,
+                3px 0 0 #000 inset;
+}
